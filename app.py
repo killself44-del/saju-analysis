@@ -42,9 +42,7 @@ ILJU_BRIDGE = {
 }
 
 def get_json_info(ilju_name):
-    # 60갑자 기본 정보 탐색
     ilju_basic = next((v for v in dbs.get('ilju', {}).values() if ilju_name in v.get('ilju', '')), {})
-    # 십신/운성 브릿지 연결
     bridge = ILJU_BRIDGE.get(ilju_name, {"sipsin": "비견(比肩)", "unseong": "묘(墓)", "gyeok": "건록격(建祿格)"})
     sipsin_info = dbs.get('sipsin', {}).get(bridge['sipsin'], {})
     unseong_info = dbs.get('unseong', {}).get(bridge['unseong'], {})
@@ -63,18 +61,20 @@ def get_saju_pillars(y, m, d, h_str, is_lunar=False):
 
 # 4. n8n 연동 함수
 def sync_to_n8n(action_type, payload):
-    # 나중에 n8n에서 생성한 Webhook URL을 여기에 넣으세요.
-    N8N_WEBHOOK_URL = "https://n8n.slayself44.uk/webhook-test/saju-save" 
+    # n8n의 Webhook 노드에서 복사한 Production URL을 여기에 넣으세요
+    N8N_WEBHOOK_URL = "https://여러분의-n8n-주소/webhook/saju-save" 
+    
     payload["action"] = action_type
     payload["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
     try:
         requests.post(N8N_WEBHOOK_URL, json=payload, timeout=5)
     except:
         pass
 
 # --- UI 레이아웃 ---
-st.set_page_config(page_title="운명 대서사시 V2.6", layout="wide")
-st.title("🔮 사주·체질·성명학 통합 대서사시 V2.6")
+st.set_page_config(page_title="운명 대서사시 V2.7", layout="wide")
+st.title("🔮 사주·체질·성명학 통합 대서사시 V2.7")
 
 with st.container():
     st.subheader("👤 기본 정보 및 서비스 구독")
@@ -95,7 +95,7 @@ with st.container():
 
 st.write("---")
 
-# 32문항 정밀 체질 문진 (전체 포함)
+# 32문항 정밀 체질 문진
 with st.expander("🧬 8체질 & 아유르베다 정밀 문진", expanded=False):
     questions = [
         "1. 육식(고기)을 하면 힘이 나고 소화가 잘 되나요?", "2. 생선이나 해산물을 먹으면 속이 편안한가요?",
@@ -128,55 +128,62 @@ pillars = get_saju_pillars(y_val, m_val, d_val, h_input, cal_type=="음력")
 
 if pillars:
     ilju_name = pillars['day']
-    st.info(f"✅ 명식 인식 완료: {pillars['year']} {pillars['month']} {ilju_name} {pillars['hour']}")
+    # 고유 ID 생성 (이름_생년월일_시)
+    user_unique_id = f"{u_name}_{y_val}{m_val:02d}{d_val:02d}_{h_input.replace(':', '')}"
 
     if st.button("📜 최종 운명 리포트 생성"):
-        with st.spinner("방대한 데이터베이스를 융합하여 분석 중입니다..."):
-            # 1. 데이터 추출
-            ilju_info, sipsin_info, unseong_info, gyeok_info, bridge = get_json_info(ilju_name)
-            tid = f"{(y_val+m_val)%8+1}{(m_val+d_val)%6+1}{(d_val+y_val)%3+1}"
-            tojeong = dbs.get('tojeong', {}).get(tid, {"full_content": ""})['full_content']
+        if not u_name:
+            st.warning("분석을 위해 성함을 입력해 주세요.")
+        else:
+            with st.spinner("방대한 데이터베이스를 융합하여 분석 중입니다..."):
+                # 1. 데이터 추출
+                ilju_info, sipsin_info, unseong_info, gyeok_info, bridge = get_json_info(ilju_name)
+                tid = f"{(y_val+m_val)%8+1}{(m_val+d_val)%6+1}{(d_val+y_val)%3+1}"
+                tojeong = dbs.get('tojeong', {}).get(tid, {"full_content": ""})['full_content']
 
-            # 2. n8n 자동 동기화 (사용자 저장)
-            sync_to_n8n("save_user", {
-                "name": u_name,
+                # 2. n8n 자동 동기화 (Upsert용 데이터 전송)
+                sync_to_n8n("save_user", {
+                    "user_id": user_unique_id,
+                    "name": u_name,
+                    "birth": f"{y_val}-{m_val:02d}-{d_val:02d}",
+                    "hour": h_input,
+                    "telegram": u_telegram if u_telegram else "미입력",
+                    "ilju": ilju_name,
+                    "subscribed": "FALSE"
+                })
+
+                # 3. AI 분석 실행
+                prompt = f"""
+                당신은 데이터 명리학의 거장입니다. '{u_name}' 님을 위한 정밀 분석 보고서를 작성하세요.
+                
+                [표현 규칙 - 필수]
+                - 모든 한자는 반드시 `:orange[**한자**]` 형식을 사용하세요. 예: 무술(:orange[**戊戌**]), 재물운(:orange[**財物運**])
+
+                [제공 데이터]
+                - 성함: {u_name}(한자: {u_hanja}) / 사주 원국: {pillars}
+                - 일주 핵심: {ilju_info} / 십신({bridge['sipsin']}): {sipsin_info} / 십이운성({bridge['unseong']}): {unseong_info}
+                - 격국: {gyeok_info} / 올해의 운세: {tojeong} / 체질 답변: {user_ans}
+
+                [보고서 구성]
+                1. 제1장 성명학: 이름의 기운과 {ilju_name}일주의 조화.
+                2. 제2장 사주 정밀 해독: [재물운], [부모운], [직업운], [배우자운], [건강운]을 아주 상세히 종합 분석.
+                3. 제3장 올해의 운세: 서사적 소설처럼 상세히 풀이.
+                4. 제4장 체질 판정 및 처방: 32개 답변 기반 8체질/아유르베다 확정 및 생활 처방.
+                """
+                st.markdown(model.generate_content(prompt).text)
+
+    # 구독 섹션 (리포트 생성 버튼 밖으로 배치하여 안정성 확보)
+    st.write("---")
+    st.subheader("🔔 체질 맞춤 건강 알림 서비스")
+    st.write("구독하시면 매일 아침 귀하의 체질에 맞는 건강 정보를 텔레그램으로 보내드립니다.")
+    
+    if st.button("🚀 텔레그램 구독하기"):
+        if u_name and u_telegram and u_telegram != "@":
+            sync_to_n8n("subscribe", {
+                "user_id": user_unique_id,
                 "telegram": u_telegram,
-                "ilju": ilju_name,
-                "saju": str(pillars)
+                "subscribed": "TRUE"
             })
-
-            # 3. AI 분석 실행
-            prompt = f"""
-            당신은 데이터 명리학의 거장입니다. '{u_name}' 님을 위해 깊이 있는 분석 보고서를 작성하세요.
-
-            [제공된 데이터]
-            - 성함: {u_name}(한자: {u_hanja})
-            - 사주 원국: {pillars}
-            - 일주 핵심: {ilju_info}
-            - 십신 정보({bridge['sipsin']}): {sipsin_info}
-            - 십이운성 정보({bridge['unseong']}): {unseong_info}
-            - 격국: {gyeok_info}
-            - 올해의 운세 데이터: {tojeong}
-            - 체질 문진 답변: {user_ans}
-
-            [보고서 구성 지침]
-            1. **제1장 성명학(姓名學)**: 성함과 {ilju_name}일주의 조화 분석.
-            2. **제2장 사주(四柱) 정밀 해독 및 종합 분석**: 
-               - 각 기둥의 의미({pillars['year']}, {pillars['month']}, {pillars['day']}, {pillars['hour']})를 풀이하세요.
-               - [재물운], [부모/형제운], [직업운], [배우자운], [건강운] 5대 영역을 JSON DB 지식을 기반으로 아주 상세하고 풍성하게 종합 분석하세요. (가장 긴 분량 필요)
-            3. **제3장 올해의 운세**: 제공된 데이터를 기반으로 드라마틱하게 서술하세요.
-            4. **제4장 체질 판정과 건강 처방**: 32개 답변으로 8체질/아유르베다를 확정 판정하고 처방하세요.
-
-            [표현 규칙]
-            - 모든 한자는 반드시 `:orange[**한자**]` 형식을 사용하세요. 예: 무술(:orange[**戊戌**]), 재물운(:orange[**財物運**])
-            - 전문적이고 담백한 문체를 유지하며 분량을 풍성하게 작성하세요.
-            """
-            st.markdown(model.generate_content(prompt).text)
-            
-            # 구독 섹션
-            st.write("---")
-            st.subheader("🔔 체질 맞춤 건강 알림 서비스")
-            if st.button("🚀 텔레그램 구독하기"):
-                sync_to_n8n("subscribe", {"telegram": u_telegram, "name": u_name})
-
-                st.success("✅ 구독 요청이 전송되었습니다! n8n 워크플로우를 확인하세요.")
+            st.success(f"✅ {u_name}님, 구독 신청이 전송되었습니다! n8n에서 데이터 업데이트를 확인하세요.")
+        else:
+            st.error("성함과 텔레그램 ID를 정확히 입력한 후 구독 버튼을 눌러주세요.")
