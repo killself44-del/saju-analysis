@@ -62,7 +62,7 @@ def get_saju_pillars(y, m, d, h_str, is_lunar=False):
 # 4. n8n 연동 함수
 def sync_to_n8n(action_type, payload):
     # n8n의 Webhook 노드에서 복사한 Production URL을 여기에 넣으세요
-    N8N_WEBHOOK_URL = "https://여러분의-n8n-주소/webhook/saju-save" 
+    N8N_WEBHOOK_URL = "https://n8n.slayself44.uk/webhook-test/saju-save" 
     
     payload["action"] = action_type
     payload["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -187,3 +187,4 @@ if pillars:
             st.success(f"✅ {u_name}님, 구독 신청이 전송되었습니다! n8n에서 데이터 업데이트를 확인하세요.")
         else:
             st.error("성함과 텔레그램 ID를 정확히 입력한 후 구독 버튼을 눌러주세요.")
+
