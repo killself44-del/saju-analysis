@@ -79,16 +79,16 @@ st.title("🔮 사주·체질·성명학 통합 대서사시 V2.6")
 with st.container():
     st.subheader("👤 기본 정보 및 서비스 구독")
     c1, c2 = st.columns(2)
-    with c1: u_name = st.text_input("한글 성함", value="이용현")
+    with c1: u_name = st.text_input("한글 성함", value="")
     with c2: u_telegram = st.text_input("텔레그램 ID (@ID)", placeholder="@username")
     
-    u_hanja = st.text_input("한자 성함 (선택)", placeholder="예: 李鎔炫")
+    u_hanja = st.text_input("한자 성함 (선택)", placeholder="")
     
     row = st.columns(4)
     with row[0]: cal_type = st.radio("달력", ["양력", "음력"], horizontal=True)
-    with row[1]: y_val = st.selectbox("년", range(2026, 1950, -1), index=50) # 1976
-    with row[2]: m_val = st.selectbox("월", range(1, 13), index=3) # 4
-    with row[3]: d_val = st.selectbox("일", range(1, 32), index=15) # 16
+    with row[1]: y_val = st.selectbox("년", range(2026, 1950, -1), index=50) 
+    with row[2]: m_val = st.selectbox("월", range(1, 13), index=3) 
+    with row[3]: d_val = st.selectbox("일", range(1, 32), index=15) 
     
     h_opts = ["모름"] + [f"{h:02d}:00" for h in range(24)]
     h_input = st.selectbox("태어난 시", h_opts, index=12)
@@ -178,4 +178,5 @@ if pillars:
             st.subheader("🔔 체질 맞춤 건강 알림 서비스")
             if st.button("🚀 텔레그램 구독하기"):
                 sync_to_n8n("subscribe", {"telegram": u_telegram, "name": u_name})
+
                 st.success("✅ 구독 요청이 전송되었습니다! n8n 워크플로우를 확인하세요.")
