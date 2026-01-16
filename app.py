@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 import google.generativeai as genai
 from pinecone import Pinecone
 from korean_lunar_calendar import KoreanLunarCalendar
-from fpdf import FPDF  # 추가된 라이브러리
+from fpdf import FPDF
 
 # 1. 시스템 초기 설정
 load_dotenv()
@@ -36,26 +36,32 @@ def load_all_databases():
 
 dbs = load_all_databases()
 
-# 3. PDF 생성 함수
+# 3. PDF 생성 함수 (bytes 변환 로직 포함)
 def generate_pdf(report_text, user_name):
     pdf = FPDF()
     pdf.add_page()
     
-    # 한글 폰트 등록 (NanumGothic.ttf 파일이 루트 폴더에 있어야 함)
-    # 폰트가 없다면 기본 Arial을 쓰지만 한글은 깨집니다. 
+    # 폰트 설정 (루트 폴더에 NanumGothic.ttf 파일이 있어야 합니다)
     font_path = "NanumGothic.ttf"
     if os.path.exists(font_path):
         pdf.add_font("Nanum", "", font_path)
-        pdf.set_font("Nanum", size=12)
+        pdf.set_font("Nanum", size=11)
     else:
-        pdf.set_font("Arial", size=12)
+        pdf.set_font("Arial", size=12) # 폰트 없을 경우 대비
     
-    # 스트림릿 전용 마크다운 문법 제거 (주황색 강조 등)
+    # 스트림릿 전용 마크다운 문법 제거
     clean_text = re.sub(r':orange\[\*\*(.*?)\*\*\]', r'\1', report_text)
-    clean_text = clean_text.replace("**", "") # 굵게 표시 제거
+    clean_text = clean_text.replace("**", "") 
     
-    pdf.multi_cell(0, 10, txt=f"[{user_name}님의 운명 대서사시 분석 보고서]\n\n" + clean_text)
-    return pdf.output()
+    # 제목 작성
+    pdf.cell(0, 10, f"[{user_name}님의 사주·체질 통합 분석 보고서]", ln=True, align='C')
+    pdf.ln(5)
+    
+    # 본문 작성
+    pdf.multi_cell(0, 8, txt=clean_text)
+    
+    # 중요: 결과를 명확하게 bytes 형식으로 변환하여 반환
+    return bytes(pdf.output())
 
 # 4. 역학 로직 및 데이터 매핑
 ILJU_BRIDGE = {
@@ -82,6 +88,7 @@ def get_saju_pillars(y, m, d, h_str, is_lunar=False):
         return {"year": parts[0].replace('년',''), "month": parts[1].replace('월',''), "day": parts[2].replace('일',''), "hour": h_str}
     except: return None
 
+# 5. n8n 연동 함수
 def sync_to_n8n(action_type, payload):
     N8N_WEBHOOK_URL = "https://n8n.slayself44.uk/webhook-test/saju-save" 
     payload["action"] = action_type
@@ -95,6 +102,7 @@ def sync_to_n8n(action_type, payload):
 st.set_page_config(page_title="운명 대서사시 V2.8", layout="wide")
 st.title("🔮 사주·체질·성명학 통합 대서사시 V2.8")
 
+# 리포트 저장을 위한 세션 상태 초기화
 if "generated_report" not in st.session_state:
     st.session_state.generated_report = ""
 
@@ -158,16 +166,19 @@ if pillars:
                 st.session_state.generated_report = report_content
                 st.markdown(report_content)
 
-    # PDF 다운로드 버튼 (리포트가 생성된 경우에만 표시)
+    # 리포트가 있을 때만 다운로드 버튼 표시
     if st.session_state.generated_report:
         st.write("---")
-        pdf_data = generate_pdf(st.session_state.generated_report, u_name)
-        st.download_button(
-            label="📥 분석 보고서 PDF로 저장하기",
-            data=pdf_data,
-            file_name=f"{u_name}_운명_리포트.pdf",
-            mime="application/pdf"
-        )
+        try:
+            pdf_data = generate_pdf(st.session_state.generated_report, u_name)
+            st.download_button(
+                label="📥 분석 보고서 PDF로 저장하기",
+                data=pdf_data,
+                file_name=f"{u_name}_운명_리포트.pdf",
+                mime="application/pdf"
+            )
+        except Exception as e:
+            st.error(f"PDF 생성 중 오류가 발생했습니다. 로그를 확인하세요: {e}")
 
     # 구독 섹션
     st.write("---")
